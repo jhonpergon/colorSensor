@@ -1,0 +1,286 @@
+<!DOCTYPE html>
+<html lang="pt">
+  <head>
+    <title>Detecção de Cores com Câmera</title>
+
+    <!-- Required meta tags -->
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+
+    <!-- css -->
+    <style type="text/css">
+      body{
+        background-color: black;
+        color: #fff;
+        margin: auto;
+        text-align: center;
+      }
+      .all{
+        position: absolute;
+        left: 0px;
+        width: 100%;
+        height: 90%;
+        line-height: 1.5;
+      }
+      video{
+        width: 100%;
+        height: 85%;
+        box-shadow: 2px 1px 7px blue;
+        color: #dcdcdc;
+        border-bottom: solid 1px lightskyblue;
+      }
+      .camSection{
+        cursor: pointer;
+        width: 75%;
+        height: auto;
+        padding: 10px 5px;
+        padding-bottom: 7px;
+        margin: 10px 0px;
+        font-size: 36px;
+        display: table-cell;
+        vertical-align: middle;
+        background-color: black;
+        box-shadow: 2px 1px 7px blue;
+        color: #d6dcfd;
+        border-radius: .4em;
+        border-color: lightskyblue;
+        line-height: 1.4;
+        text-align: center;
+      }
+      .controles{
+        width: 99%;
+        bottom: 0;
+        margin: auto;
+        margin-bottom: 50px;
+
+      }
+      .infoCor{
+        position: absolute;
+        top: 5%;
+        left: 51%;
+        transform: translate(-49%, -50%);
+        z-index: 1;
+        font-size: 26px;
+        margin: 0;
+        width: auto;
+        padding: 2px 10px;
+        padding-right: 0px;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="all">
+      <p class="infoCor">Color Sensor: <b id="corDetect">...</b></p>
+      <video id="video" autoplay></video>
+      <canvas id="canvas" width="360" height="480" hidden></canvas>
+
+      <div class="controles">
+        <select class="camSection" id="cameraSelector"></select><br>
+        <button class="camSection" id="startButton" onclick="startCamera()">Abrir Câmera Escolhida</button>
+      </div>
+    </div>
+
+<script>
+let xCromo = "indefinido";
+let goCromo = "indefinido";
+let corDetectada = false;
+
+  // Variáveis globais
+  var video;
+  var canvas;
+  var context;
+  var currentStream;
+  var cameras = [];
+
+
+  // Iniciar a câmera e listar as câmeras disponíveis quando o documento estiver pronto
+  document.addEventListener('DOMContentLoaded', function (event) {
+    video = document.getElementById('video');
+    canvas = document.getElementById('canvas');
+    context = canvas.getContext('2d');
+    listCameras();
+    startCamera();
+  });
+
+
+
+
+
+function listCameras() {
+  navigator.mediaDevices.enumerateDevices().then(function (devices) {
+    cameras = devices.filter(function (device) {
+      return device.kind === 'videoinput';
+    });
+
+    var cameraSelector = document.getElementById('cameraSelector');
+    cameraSelector.innerHTML = '';
+
+    cameras.forEach(function (camera, index) {
+      var option = document.createElement('option');
+      option.value = index;
+      option.text = getCameraLabel(camera.label, index);
+      cameraSelector.appendChild(option);
+    });
+
+    // Invert the order of the camera list
+    var options = Array.from(cameraSelector.options);
+    options.reverse();
+    options.forEach(function (option) {
+      cameraSelector.appendChild(option);
+    });
+  });
+}
+
+function getCameraLabel(label, index) {
+  if (label.toLowerCase().includes('front')) {
+    return 'Câmera Frontal';
+  } else if (label.toLowerCase().includes('back')) {
+    return 'Câmera Traseira';
+  } else {
+    return 'Câmera ' + (index + 1);
+  }
+}
+
+
+// Função para iniciar a câmera
+function startCamera() {
+  // Verificar suporte a getUserMedia
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+    alert('Seu navegador não suporta acesso à câmera.');
+    return;
+  }
+
+  var cameraSelector = document.getElementById('cameraSelector');
+
+  var selectedCameraIndex = cameraSelector.value;
+  var selectedCamera = cameras[selectedCameraIndex];
+
+  var constraints = {
+    video: {
+      deviceId: { exact: selectedCamera.deviceId },
+      facingMode: 'environment' // Usar a câmera traseira
+    }
+  };
+
+  // Encerrar o stream atual, se existir
+  if (currentStream) {
+    currentStream.getTracks().forEach(function (track) {
+      track.stop();
+    });
+  }
+
+  // Solicitar permissão para acessar a câmera selecionada
+  try {
+    navigator.mediaDevices.getUserMedia(constraints)
+      .then(function (stream) {
+        video.srcObject = stream;
+        video.play();
+
+        currentStream = stream;
+
+        // Iniciar o processamento do vídeo
+        processVideo();
+      })
+      .catch(function (error) {
+        console.error('Erro ao acessar a câmera:', error);
+        // alert('Erro ao acessar a câmera.');
+      });
+  } catch (error) {
+    console.error('Erro ao acessar a câmera:', error);
+    // alert('Erro ao acessar a câmera.');
+  }
+}
+
+
+
+
+
+
+  // Função para verificar se uma cor está dentro da faixa de uma cor específica
+  function isColorInRange(r, g, b, minR, maxR, minG, maxG, minB, maxB) {
+    return r >= minR && r <= maxR &&
+           g >= minG && g <= maxG &&
+           b >= minB && b <= maxB;
+  }
+
+  // Função para verificar se uma cor é uma das cores do arco-íris
+  function isRainbowColor(r, g, b) {
+    // Verificar cada cor individualmente
+    if (isColorInRange(r, g, b, 75, 255, 0, 70, 0, 70)) { // Vermelho
+      return 'Red';
+    } else if (isColorInRange(r, g, b, 0, 160, 145, 255, 0, 160)) { // Verde
+      return 'Green';
+    } else if (isColorInRange(r, g, b, 0, 70, 0, 70, 60, 255)) { // Azul
+      return 'Blue';
+    } else if (isColorInRange(r, g, b, 70, 120, 70, 120, 60, 235)) { // Roxo
+      return 'Purple';
+    } else if (isColorInRange(r, g, b, 220, 235, 70, 170, 0, 120)) { // Laranja
+      return 'Orange';
+    } else if (isColorInRange(r, g, b, 90, 220, 80, 200, 0, 90)) { // Amarelo
+      return 'Yellow';
+    } else if (isColorInRange(r, g, b, 150, 225, 50, 160, 100, 230)) { // Rosa
+      return 'Pink';
+    } else if (isColorInRange(r, g, b, 100, 180, 90, 140, 60, 120)) { // Marrom
+      return 'Brown';
+    } else if (isColorInRange(r, g, b, 20, 90, 20, 90, 20, 90)) { // Cinza
+      return 'Gray';
+    } else if (isColorInRange(r, g, b, 0, 20, 0, 20, 0, 20)) { // Preto
+      return 'Black';
+    } else if (isColorInRange(r, g, b, 145, 255, 145, 255, 145, 255)) { // Branco
+      return 'White';
+    }
+
+    return false;
+  }
+
+  // Função de callback chamada a cada quadro de vídeo
+  function processVideo() {
+    // Desenhar o quadro atual do vídeo no canvas
+    context.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+    // Obter os dados de pixels do canvas
+    var imageData = context.getImageData(0, 0, canvas.width, canvas.height);
+    var data = imageData.data;
+
+    // Verificar cada pixel para detectar as cores
+    for (var i = 0; i < data.length; i += 4) {
+      var r = data[i];
+      var g = data[i + 1];
+      var b = data[i + 2];
+
+      // Verificar se a cor é uma das cores
+      var color = isRainbowColor(r, g, b);
+      if (color) {
+
+        // Disparar função de exibição
+        let corAlert = document.getElementById('corDetect');
+        let arrayColors = ["red", "Vermelho", "#ff2a2d", "green", "Verde", "#60e651", "blue", "Azul", "#5f99f5", "purple", "Roxo", "#9c70de", "orange", "Laranja", "#fe9046", "yellow", "Amarelo", "#eac53d", "pink", "Rosa", "#ea54f4", "brown", "Marrom", "#b67a62", "gray", "Cinza", "#818181", "brack", "Preto", "#090909", "white", "Claridade", "#fff"]
+
+        let corSelect = arrayColors.indexOf(color.toLowerCase())
+
+        if (corSelect > -1) {
+          let colorx = arrayColors[corSelect+1]
+          let colory = arrayColors[corSelect+2]
+          corAlert.innerHTML = '<i style="color:' + colory + '">' + colorx + '</i>';
+        }else{
+          colorx = "Escuridão";
+          colory = "#090909";
+          corAlert.innerHTML = '<i style="color:' + colory + '">' + colorx + '</i>';
+        }
+        
+        setTimeout(function () {
+          corAlert.innerHTML = '...';
+        }, 500);
+        break; // Parar o loop se uma cor for encontrada
+      }
+    }
+
+    // Chamar a função novamente para processar o próximo quadro
+    requestAnimationFrame(processVideo);
+  } 
+
+
+</script>
+</body>
+</html>
